@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CipherGhost — Encrypted Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #060B12;
+    --bg2:       #0A1220;
+    --bg3:       #0F1A2E;
+    --panel:     #0D1929;
+    --border:    #1A3050;
+    --cyan:      #00E5FF;
+    --cyan-dim:  #007A99;
+    --green:     #39FF14;
+    --green-dim: #1A7A07;
+    --red:       #FF3860;
+    --gold:      #FFD166;
+    --text:      #C8D8E8;
+    --text-dim:  #5A7A9A;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── MATRIX BACKGROUND ── */
+  #matrix-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    opacity: 0.04;
+    pointer-events: none;
+  }
+
+  /* ── GRID LINES ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 40px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(6,11,18,0.85);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--cyan);
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px var(--cyan);
+  }
+
+  .logo span { color: var(--green); }
+
+  nav a {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    text-decoration: none;
+    letter-spacing: 1px;
+    padding: 8px 18px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  nav a:hover {
+    color: var(--cyan);
+    border-color: var(--cyan);
+    box-shadow: 0 0 12px rgba(0,229,255,0.2);
+  }
+
+  /* ── STATUS BAR ── */
+  .status-bar {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 10px 40px;
+    background: rgba(13,25,41,0.7);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse-dot 2s infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%,100% { opacity:1; }
+    50% { opacity:0.4; }
+  }
+
+  .status-bar .algo { color: var(--gold); }
+
+  /* ── MAIN CHAT AREA ── */
+  #chat-view {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 100px);
+  }
+
+  .chat-panels {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── USER PANELS ── */
+  .user-panel {
+    display: flex;
+    flex-direction: column;
+    background: rgba(10,18,32,0.5);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .user-panel:last-child { border-right: none; border-left: 1px solid var(--border); }
+
+  .user-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(13,25,41,0.6);
+  }
+
+  .avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .avatar.alice {
+    background: rgba(0,229,255,0.12);
+    border: 1.5px solid var(--cyan);
+    color: var(--cyan);
+    box-shadow: 0 0 10px rgba(0,229,255,0.2);
+  }
+
+  .avatar.bob {
+    background: rgba(57,255,20,0.1);
+    border: 1.5px solid var(--green);
+    color: var(--green);
+    box-shadow: 0 0 10px rgba(57,255,20,0.15);
+  }
+
+  .user-name {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+  .user-name.alice { color: var(--cyan); }
+  .user-name.bob { color: var(--green); }
+
+  .user-role {
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+
+  /* ── MESSAGE LOG ── */
+  .message-log {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* ── MIDDLE CHANNEL ── */
+  .channel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: rgba(6,11,18,0.8);
+  }
+
+  .channel-label {
+    font-family: var(--mono);
+    font-size: 0.55rem;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    writing-mode: vertical-lr;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    margin: 8px 0;
+  }
+
+  .channel-line {
+    width: 1px;
+    flex: 1;
+    background: linear-gradient(to bottom, transparent, var(--cyan-dim), var(--cyan-dim), transparent);
+    opacity: 0.4;
+  }
+
+  /* ── PACKET ANIMATION CONTAINER ── */
+  #packet-stage {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  /* ── INPUT AREA ── */
+  .input-area {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: rgba(13,25,41,0.8);
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .msg-input {
+    flex: 1;
+    background: rgba(6,11,18,0.8);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    resize: none;
+    height: 44px;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  .msg-input:focus { border-color: var(--cyan-dim); }
+  .msg-input::placeholder { color: var(--text-dim); }
+
+  .send-btn {
+    background: rgba(0,229,255,0.08);
+    border: 1px solid var(--cyan-dim);
+    border-radius: 6px;
+    padding: 10px 20px;
+    color: var(--cyan);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .send-btn:hover {
+    background: rgba(0,229,255,0.15);
+    box-shadow: 0 0 14px rgba(0,229,255,0.2);
+  }
+
+  /* ── MESSAGE BUBBLES ── */
+  .msg-bubble {
+    max-width: 90%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    position: relative;
+  }
+
+  .msg-bubble.outgoing {
+    align-self: flex-end;
+    background: rgba(0,229,255,0.06);
+    border: 1px solid rgba(0,229,255,0.2);
+    color: var(--text);
+  }
+
+  .msg-bubble.incoming {
+    align-self: flex-start;
+    background: rgba(57,255,20,0.05);
+    border: 1px solid rgba(57,255,20,0.2);
+    color: var(--text);
+  }
+
+  .msg-bubble .cipher-layer {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--green);
+    opacity: 0.75;
+    margin-top: 6px;
+    word-break: break-all;
+    line-height: 1.4;
+  }
+
+  .msg-time {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    text-align: right;
+  }
+
+  /* Encrypted state */
+  .msg-bubble.encrypting .plain-text { display: none; }
+  .msg-bubble.encrypting { border-color: var(--green); }
+
+  /* ── SMOKE ANIMATION ── */
+  .smoke-particle {
+    position: absolute;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--cyan);
+    pointer-events: none;
+    animation: smoke-rise 1.4s ease-out forwards;
+  }
+
+  @keyframes smoke-rise {
+    0%   { opacity:0.9; transform: scale(1) translate(0,0); }
+    40%  { opacity:0.6; }
+    100% { opacity:0;   transform: scale(3) translate(var(--dx), var(--dy)); filter: blur(6px); }
+  }
+
+  /* ── PACKET FALLING ── */
+  .falling-packet {
+    position: absolute;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--green);
+    text-shadow: 0 0 6px var(--green);
+    animation: packet-fall 0.8s cubic-bezier(.25,.8,.25,1) forwards;
+    pointer-events: none;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @keyframes packet-fall {
+    0%   { opacity:0; transform: translateY(-30px) scale(0.8); }
+    30%  { opacity:1; }
+    70%  { opacity:1; transform: translateY(0) scale(1); }
+    100% { opacity:0.7; transform: translateY(6px) scale(1); }
+  }
+
+  /* ── DECRYPT WIPE ── */
+  .decrypt-wipe {
+    animation: decrypt-reveal 0.6s steps(12) forwards;
+  }
+
+  @keyframes decrypt-reveal {
+    from { filter: blur(4px); opacity:0.3; color: var(--green); }
+    to   { filter: blur(0);   opacity:1;   color: var(--text); }
+  }
+
+  /* ── LEARN PAGE ── */
+  #learn-view {
+    display: none;
+    position: relative;
+    z-index: 2;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 60px 40px 100px;
+  }
+
+  #learn-view h1 {
+    font-family: var(--mono);
+    font-size: 1.6rem;
+    color: var(--cyan);
+    text-shadow: 0 0 20px rgba(0,229,255,0.4);
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+
+  #learn-view .sub {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-bottom: 48px;
+    letter-spacing: 1px;
+  }
+
+  .learn-section {
+    margin-bottom: 48px;
+  }
+
+  .learn-section h2 {
+    font-family: var(--mono);
+    font-size: 0.95rem;
+    color: var(--gold);
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .learn-section p {
+    font-size: 0.92rem;
+    line-height: 1.8;
+    color: var(--text);
+    margin-bottom: 14px;
+    max-width: 65ch;
+  }
+
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 8px;
+  }
+
+  .timeline-item {
+    display: grid;
+    grid-template-columns: 90px 1px 1fr;
+    gap: 0 20px;
+    padding-bottom: 28px;
+    position: relative;
+  }
+
+  .timeline-item:last-child { padding-bottom: 0; }
+
+  .t-year {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--cyan);
+    text-align: right;
+    padding-top: 3px;
+  }
+
+  .t-line {
+    width: 1px;
+    background: var(--border);
+    position: relative;
+  }
+
+  .t-line::before {
+    content: '';
+    position: absolute;
+    top: 6px; left: 50%;
+    transform: translateX(-50%);
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan);
+  }
+
+  .t-body {
+    padding-top: 0;
+  }
+
+  .t-title {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .t-desc {
+    font-size: 0.83rem;
+    color: var(--text-dim);
+    line-height: 1.65;
+  }
+
+  .why-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  .why-card {
+    background: rgba(13,25,41,0.7);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    transition: border-color 0.2s;
+  }
+
+  .why-card:hover { border-color: var(--cyan-dim); }
+
+  .why-card .icon {
+    font-size: 1.4rem;
+    margin-bottom: 10px;
+  }
+
+  .why-card h3 {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--cyan);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+
+  .why-card p {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .aes-demo {
+    background: rgba(6,11,18,0.8);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 22px;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    margin-top: 12px;
+  }
+
+  .aes-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+    color: var(--text-dim);
+  }
+
+  .aes-row .label { width: 80px; color: var(--text-dim); flex-shrink:0; }
+  .aes-row .value { color: var(--green); word-break: break-all; }
+  .aes-row .arrow { color: var(--cyan); flex-shrink:0; }
+
+  .back-btn {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    letter-spacing: 1px;
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 48px;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+
+  .back-btn:hover { color: var(--cyan); border-color: var(--cyan); }
+
+  /* ── SCAN LINE ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.05) 2px,
+      rgba(0,0,0,0.05) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── CIPHER TICKER ── */
+  .cipher-ticker {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--green-dim);
+    opacity: 0.5;
+    position: fixed;
+    bottom: 10px;
+    left: 0; right: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .cipher-ticker span {
+    display: inline-block;
+    animation: ticker-scroll 30s linear infinite;
+  }
+
+  @keyframes ticker-scroll {
+    from { transform: translateX(100vw); }
+    to   { transform: translateX(-100%); }
+  }
+
+  /* ── NOTIFICATION BADGE ── */
+  .notif {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--green);
+    background: rgba(57,255,20,0.08);
+    border: 1px solid rgba(57,255,20,0.3);
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin: 6px 16px;
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+  .msg-label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    gap: 10px;
+    opacity: 0.5;
+  }
+
+  .empty-state .big { font-size: 2rem; opacity: 0.4; }
+
+  /* ── LOCK ICON ANIMATION ── */
+  @keyframes glow-pulse {
+    0%,100% { text-shadow: 0 0 6px var(--cyan); }
+    50% { text-shadow: 0 0 20px var(--cyan), 0 0 40px var(--cyan-dim); }
+  }
+
+  .glow { animation: glow-pulse 2.5s infinite; }
+
+</style>
+</head>
+<body>
+
+<canvas id="matrix-canvas"></canvas>
+
+<!-- Packet stage overlay -->
+<div id="packet-stage"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">CIPHER<span>GHOST</span></div>
+  <a onclick="showLearn()">&#9632; HOW ENCRYPTION WORKS</a>
+</nav>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div class="status-dot"></div>
+    <span>SECURE CHANNEL ACTIVE</span>
+  </div>
+  <span>ALGO: <span class="algo">AES-256-GCM</span></span>
+  <span>KEY EXCHANGE: <span class="algo">ECDH P-384</span></span>
+  <span>INTEGRITY: <span class="algo">HMAC-SHA256</span></span>
+  <span style="margin-left:auto;">SESSION: <span class="algo" id="session-id">—</span></span>
+</div>
+
+<!-- CHAT VIEW -->
+<div id="chat-view">
+  <div class="chat-panels">
+
+    <!-- ALICE PANEL -->
+    <div class="user-panel" id="alice-panel">
+      <div class="user-header">
+        <div class="avatar alice">A</div>
+        <div>
+          <div class="user-name alice">ALICE</div>
+          <div class="user-role">SENDER · PORT 8001</div>
+        </div>
+      </div>
+      <div class="message-log" id="alice-log">
+        <div class="empty-state">
+          <div class="big">🔒</div>
+          <div>Type a message below</div>
+          <div>Alice sends · Bob receives</div>
+        </div>
+      </div>
+      <div class="input-area">
+        <textarea class="msg-input" id="alice-input" placeholder="Type a message as Alice…" onkeydown="handleKey(event,'alice')" rows="1"></textarea>
+        <button class="send-btn" onclick="sendMessage('alice')">ENCRYPT &amp; SEND ▶</button>
+      </div>
+    </div>
+
+    <!-- CHANNEL -->
+    <div class="channel">
+      <div class="channel-line"></div>
+      <div class="channel-label">ENCRYPTED CHANNEL</div>
+      <div class="channel-line"></div>
+    </div>
+
+    <!-- BOB PANEL -->
+    <div class="user-panel" id="bob-panel">
+      <div class="user-header">
+        <div class="avatar bob">B</div>
+        <div>
+          <div class="user-name bob">BOB</div>
+          <div class="user-role">RECEIVER · PORT 8002</div>
+        </div>
+      </div>
+      <div class="message-log" id="bob-log">
+        <div class="empty-state">
+          <div class="big">📡</div>
+          <div>Waiting for packets…</div>
+          <div>Messages arrive encrypted</div>
+        </div>
+      </div>
+      <div class="input-area">
+        <textarea class="msg-input" id="bob-input" placeholder="Type a message as Bob…" onkeydown="handleKey(event,'bob')" rows="1"></textarea>
+        <button class="send-btn" onclick="sendMessage('bob')" style="border-color:var(--green-dim);color:var(--green);background:rgba(57,255,20,0.06);">ENCRYPT &amp; SEND ▶</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- LEARN VIEW -->
+<div id="learn-view">
+  <a class="back-btn" onclick="showChat()">← BACK TO CHAT</a>
+
+  <h1 class="glow">// WHAT IS ENCRYPTION?</h1>
+  <div class="sub">A field guide to keeping secrets in the open</div>
+
+  <div class="learn-section">
+    <h2>THE CORE IDEA</h2>
+    <p>Encryption is the process of scrambling information so that only someone with the right key can read it. Think of it like a padlock with a message inside — anyone can see the locked box, but only the person with the key can open it.</p>
+    <p>Modern encryption uses complex mathematics to convert plain text (readable data) into ciphertext (scrambled data). The transformation is designed to be practically impossible to reverse without the correct key — even with the most powerful computers alive.</p>
+    <p>On this site, every message you type is encrypted with AES-256 before it travels across the channel. The ciphertext — that wall of hex characters — is what the internet actually sees.</p>
+  </div>
+
+  <div class="learn-section">
+    <h2>A SHORT HISTORY</h2>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="t-year">~1900 BC</div>
+        <div class="t-line"></div>
+        <div class="t-body">
+          <div class="t-title">Caesar & Substitution Ciphers</div>
+          <div class="t-desc">Ancient Egyptians used non-standard hieroglyphs. Julius Caesar shifted letters by a fixed number — "A" becomes "D", "B" becomes "E". Simple, but it worked until someone figured out the pattern.</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-year">1467</div>
+        <div class="t-line"></div>
+        <div class="t-body">
+          <div class="t-title">The Vigenère Cipher</div>
+          <div class="t-desc">Leon Battista Alberti invented polyalphabetic substitution — using multiple Caesar shifts based on a keyword. Far harder to crack, it was called "le chiffre indéchiffrable" for nearly 300 years.</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-year">1940s</div>
+        <div class="t-line"></div>
+        <div class="t-body">
+          <div class="t-title">Enigma & the Birth of Modern Cryptanalysis</div>
+          <div class="t-desc">Nazi Germany used the Enigma machine — an electromechanical cipher device with 158 quintillion possible settings. Alan Turing and the team at Bletchley Park cracked it, shortening World War II and laying the foundations of computer science.</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-year">1976</div>
+        <div class="t-line"></div>
+        <div class="t-body">
+          <div class="t-title">Public-Key Cryptography</div>
+          <div class="t-desc">Whitfield Diffie and Martin Hellman introduced the revolutionary idea of key pairs — a public key anyone can use to encrypt, and a private key only you can use to decrypt. This solved the oldest problem in cryptography: how do two strangers share a secret in public?</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-year">1977</div>
+        <div class="t-line"></div>
+        <div class="t-body">
+          <div class="t-title">RSA Algorithm</div>
+          <div class="t-desc">Rivest, Shamir, and Adleman published RSA — an algorithm based on the near-impossibility of factoring very large numbers. Still in widespread use today for secure key exchange.</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-year">2001</div>
+        <div class="t-line"></div>
+        <div class="t-body">
+          <div class="t-title">AES Becomes the Global Standard</div>
+          <div class="t-desc">The Advanced Encryption Standard, developed by Belgian cryptographers Joan Daemen and Vincent Rijmen, was adopted by the U.S. government. AES-256 is what protects your banking, your messages, and your passwords right now.</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-year">Today</div>
+        <div class="t-line"></div>
+        <div class="t-body">
+          <div class="t-title">End-to-End Encryption & Post-Quantum Cryptography</div>
+          <div class="t-desc">Apps like Signal use E2E encryption so not even the server can read your messages. Meanwhile, researchers race to build encryption that will survive quantum computers — which could theoretically break today's algorithms.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="learn-section">
+    <h2>HOW AES-256 ACTUALLY WORKS</h2>
+    <p>AES (Advanced Encryption Standard) uses a 256-bit key and processes data in 128-bit blocks. It runs the data through 14 rounds of mathematical transformations — substitutions, shifts, mixes, and key additions — until the output looks like pure noise.</p>
+    <div class="aes-demo">
+      <div class="aes-row"><span class="label">PLAINTEXT</span><span class="arrow">→</span><span class="value" style="color:var(--text)">hello alice</span></div>
+      <div class="aes-row"><span class="label">KEY</span><span class="arrow">→</span><span class="value">3a9f2c1e8b4d7f6a0e5c2b9d...</span></div>
+      <div class="aes-row"><span class="label">ROUND 1</span><span class="arrow">→</span><span class="value">9d4f2a8c1b7e3d6f0c5a2e9b...</span></div>
+      <div class="aes-row"><span class="label">ROUND 7</span><span class="arrow">→</span><span class="value">f3c8a1e6b2d9f4c0e7a3b5d2...</span></div>
+      <div class="aes-row"><span class="label">ROUND 14</span><span class="arrow">→</span><span class="value">a8f3c21b9e4d7a6f2c1e8b5d0f9a...</span></div>
+      <div class="aes-row"><span class="label">CIPHERTEXT</span><span class="arrow">→</span><span class="value">a8f3c21b9e4d7a6f2c1e8b5d0f9a3b7c...</span></div>
+    </div>
+    <p style="margin-top:14px;">Without the key, the ciphertext reveals nothing about the original message. Brute-forcing AES-256 would take longer than the estimated age of the universe, even with every computer on Earth working together.</p>
+  </div>
+
+  <div class="learn-section">
+    <h2>WHY IT MATTERS</h2>
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="icon">🏦</div>
+        <h3>FINANCIAL SAFETY</h3>
+        <p>Every online payment, bank transfer, and card transaction is encrypted in transit. Without it, your card number is visible to anyone monitoring the network.</p>
+      </div>
+      <div class="why-card">
+        <div class="icon">🗣️</div>
+        <h3>FREE SPEECH</h3>
+        <p>Journalists, activists, and ordinary citizens in authoritarian countries depend on encrypted communication to speak freely without fear of surveillance.</p>
+      </div>
+      <div class="why-card">
+        <div class="icon">🏥</div>
+        <h3>MEDICAL PRIVACY</h3>
+        <p>Medical records, prescriptions, and test results are legally required to be encrypted. Your health history is between you and your doctor.</p>
+      </div>
+      <div class="why-card">
+        <div class="icon">🔐</div>
+        <h3>IDENTITY PROTECTION</h3>
+        <p>Passwords are stored as encrypted hashes. Even if a company's database is stolen, attackers can't read your actual password — only a useless scramble.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="learn-section">
+    <h2>THE CHAT ON THIS PAGE</h2>
+    <p>When Alice types a message and hits Send, here's what happens in a real encrypted system:</p>
+    <p>A shared secret is derived using ECDH (Elliptic Curve Diffie-Hellman) key exchange. That secret is used as the AES-256 key. The message is encrypted, producing ciphertext. An HMAC tag is added to prove the message wasn't tampered with. The ciphertext travels across the network. Bob's app uses the same shared secret to decrypt it, verify the tag, and display the original message.</p>
+    <p>The smoke animation you see represents the plaintext "disappearing" — once encrypted, the original information is gone from the wire. The falling glyphs on Bob's side represent the ciphertext arriving. The decrypt reveal shows the key unlocking the data.</p>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="cipher-ticker">
+  <span id="ticker-text"></span>
+</div>
+
+<script>
+// ── MATRIX CANVAS ──
+const canvas = document.getElementById('matrix-canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+const cols = Math.floor(canvas.width / 16);
+const drops = Array(cols).fill(1);
+const chars = '0123456789ABCDEFアイウエオカキクケコ01アBCデF789';
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(6,11,18,0.05)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#39FF14';
+  ctx.font = '13px JetBrains Mono';
+  drops.forEach((y,i) => {
+    ctx.fillText(chars[Math.floor(Math.random()*chars.length)], i*16, y*16);
+    if (y*16 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  });
+}
+setInterval(drawMatrix, 60);
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+
+// ── SESSION ID ──
+document.getElementById('session-id').textContent =
+  [...Array(16)].map(()=>'0123456789ABCDEF'[Math.floor(Math.random()*16)]).join('');
+
+// ── CIPHER TICKER ──
+const hex = [...Array(120)].map(()=>'0123456789ABCDEF'[Math.floor(Math.random()*16)]).join(' ');
+document.getElementById('ticker-text').textContent = hex + ' ' + hex;
+
+// ── FAKE AES ENCRYPT ──
+function fakeEncrypt(text) {
+  const hex = [];
+  for (let c of text) {
+    hex.push(((c.charCodeAt(0) * 137 + 42) & 255).toString(16).padStart(2,'0').toUpperCase());
+  }
+  const padding = [...Array(Math.floor(Math.random()*8)+8)]
+    .map(()=>'0123456789ABCDEF'[Math.floor(Math.random()*16)]).join('').match(/.{2}/g) || [];
+  return [...hex, ...padding].join('');
+}
+
+function fakeDecrypt(enc, original) {
+  return original; // simulate successful decrypt
+}
+
+// ── SCRAMBLE TEXT UTIL ──
+function scramble(text) {
+  const pool = '0123456789ABCDEFabcdef';
+  return text.split('').map(c => c === ' ' ? ' ' : pool[Math.floor(Math.random()*pool.length)]).join('');
+}
+
+// ── HANDLE KEY ──
+function handleKey(e, user) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage(user);
+  }
+}
+
+// ── SEND MESSAGE ──
+function sendMessage(sender) {
+  const inputEl = document.getElementById(sender + '-input');
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = '';
+
+  const receiver = sender === 'alice' ? 'bob' : 'alice';
+  const senderLog = document.getElementById(sender + '-log');
+  const receiverLog = document.getElementById(receiver + '-log');
+
+  // Clear empty state
+  senderLog.querySelectorAll('.empty-state').forEach(e => e.remove());
+  receiverLog.querySelectorAll('.empty-state').forEach(e => e.remove());
+
+  const ciphertext = fakeEncrypt(text);
+  const now = new Date().toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'});
+
+  // ── SENDER BUBBLE ──
+  const sBubble = document.createElement('div');
+  sBubble.className = 'msg-bubble outgoing';
+  sBubble.innerHTML = `
+    <div class="msg-label">PLAINTEXT</div>
+    <div class="plain-text">${escHtml(text)}</div>
+    <div class="msg-time">${now}</div>
+  `;
+  senderLog.appendChild(sBubble);
+  senderLog.scrollTop = senderLog.scrollHeight;
+
+  // Encrypt animation on sender bubble
+  setTimeout(() => {
+    sBubble.innerHTML = `
+      <div class="msg-label">ENCRYPTING…</div>
+      <div class="plain-text" style="font-family:var(--mono);color:var(--green);font-size:0.72rem;word-break:break-all;">${ciphertext}</div>
+      <div class="msg-time">${now} · AES-256-GCM</div>
+    `;
+    sBubble.style.borderColor = 'var(--green)';
+    sBubble.style.background = 'rgba(57,255,20,0.05)';
+  }, 300);
+
+  // ── SMOKE ANIMATION ──
+  setTimeout(() => {
+    smokeBubble(sBubble, sender, receiver, text, ciphertext, now, receiverLog);
+  }, 900);
+}
+
+function smokeBubble(bubble, sender, receiver, text, ciphertext, time, receiverLog) {
+  const rect = bubble.getBoundingClientRect();
+  const stage = document.getElementById('packet-stage');
+
+  // Create smoke particles
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  for (let i = 0; i < 28; i++) {
+    const p = document.createElement('div');
+    p.className = 'smoke-particle';
+    const angle = (Math.random() * Math.PI * 2);
+    const dist = 40 + Math.random() * 60;
+    p.style.left = cx + 'px';
+    p.style.top = cy + 'px';
+    p.style.setProperty('--dx', Math.cos(angle)*dist + 'px');
+    p.style.setProperty('--dy', (Math.sin(angle)*dist - 30) + 'px');
+    p.style.width = (4 + Math.random()*8) + 'px';
+    p.style.height = p.style.width;
+    p.style.animationDelay = Math.random()*0.3 + 's';
+    const color = Math.random() > 0.5 ? 'var(--cyan)' : 'var(--green)';
+    p.style.background = color;
+    p.style.boxShadow = `0 0 8px ${color}`;
+    stage.appendChild(p);
+    setTimeout(() => p.remove(), 1800);
+  }
+
+  // Fade out the sender bubble
+  bubble.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+  bubble.style.opacity = '0';
+  bubble.style.transform = 'scale(0.85) translateY(-10px)';
+  setTimeout(() => bubble.remove(), 700);
+
+  // ── PACKET TRAVELS ── (short delay then appears at receiver)
+  setTimeout(() => {
+    deliverPacket(sender, receiver, text, ciphertext, time, receiverLog);
+  }, 700);
+}
+
+function deliverPacket(sender, receiver, text, ciphertext, time, receiverLog) {
+  const stage = document.getElementById('packet-stage');
+  const receiverPanel = document.getElementById(receiver + '-panel');
+  const rect = receiverPanel.getBoundingClientRect();
+
+  // Falling packet element
+  const pkt = document.createElement('div');
+  pkt.className = 'falling-packet';
+  pkt.textContent = ciphertext.substring(0, 32) + '…';
+  const x = rect.left + 20 + Math.random() * (rect.width - 60);
+  const y = rect.top + 80;
+  pkt.style.left = x + 'px';
+  pkt.style.top = y + 'px';
+  stage.appendChild(pkt);
+  setTimeout(() => pkt.remove(), 1000);
+
+  // ── RECEIVER BUBBLE (encrypted first) ──
+  setTimeout(() => {
+    const rBubble = document.createElement('div');
+    rBubble.className = 'msg-bubble incoming';
+    const accentColor = receiver === 'alice' ? 'var(--cyan)' : 'var(--green)';
+    rBubble.style.borderColor = accentColor;
+    rBubble.innerHTML = `
+      <div class="msg-label">CIPHERTEXT RECEIVED</div>
+      <div class="cipher-layer" id="cipher-display-${Date.now()}">${ciphertext}</div>
+      <div class="msg-time">${time} · decrypting…</div>
+    `;
+    receiverLog.appendChild(rBubble);
+    receiverLog.scrollTop = receiverLog.scrollHeight;
+
+    // Notify
+    const notif = document.createElement('div');
+    notif.className = 'notif';
+    notif.textContent = `⬇ Packet received from ${sender.toUpperCase()} · ${ciphertext.length} bytes`;
+    receiverLog.appendChild(notif);
+    receiverLog.scrollTop = receiverLog.scrollHeight;
+
+    // ── DECRYPT ANIMATION ──
+    setTimeout(() => {
+      const cipherEl = rBubble.querySelector('.cipher-layer');
+      // Scramble effect
+      let count = 0;
+      const scrambleInterval = setInterval(() => {
+        if (count > 10) {
+          clearInterval(scrambleInterval);
+          // Final reveal
+          rBubble.innerHTML = `
+            <div class="msg-label">DECRYPTED</div>
+            <div class="plain-text decrypt-wipe">${escHtml(text)}</div>
+            <div class="cipher-layer" style="font-size:0.62rem;opacity:0.35;">${ciphertext.substring(0,20)}…</div>
+            <div class="msg-time">${time} · ✓ verified</div>
+          `;
+          rBubble.style.borderColor = receiver === 'alice' ? 'rgba(0,229,255,0.3)' : 'rgba(57,255,20,0.3)';
+          rBubble.style.background = receiver === 'alice'
+            ? 'rgba(0,229,255,0.06)'
+            : 'rgba(57,255,20,0.05)';
+
+          // Update notif
+          notif.textContent = `✓ Decryption successful · HMAC verified`;
+          notif.style.color = 'var(--cyan)';
+          notif.style.borderColor = 'rgba(0,229,255,0.3)';
+          notif.style.background = 'rgba(0,229,255,0.05)';
+          receiverLog.scrollTop = receiverLog.scrollHeight;
+        } else {
+          if (cipherEl) cipherEl.textContent = scramble(ciphertext);
+          count++;
+        }
+      }, 60);
+    }, 900);
+
+  }, 200);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── PAGE SWITCHING ──
+function showLearn() {
+  document.getElementById('chat-view').style.display = 'none';
+  document.getElementById('learn-view').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function showChat() {
+  document.getElementById('learn-view').style.display = 'none';
+  document.getElementById('chat-view').style.display = 'flex';
+}
+</script>
+</body>
+</html>
